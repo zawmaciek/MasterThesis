@@ -1,1 +1,1 @@
-# MasterThesis
+# Movie recommendation system created for my master thesis
