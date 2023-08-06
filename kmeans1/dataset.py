@@ -29,7 +29,7 @@ class Movie:
 
 class Dataset:
     def __init__(self) -> None:
-        self.con = sqlite3.connect("dataset.db")
+        self.con = sqlite3.connect("../dataset.db")
         self.cur = self.con.cursor()
         self.movie_id_to_matrix_movie_id: Optional[dict[movieId, int]] = None
         self.matrix_movie_id_to_movie_id: Optional[:dict[int, movieId]] = None
