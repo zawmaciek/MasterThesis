@@ -2,15 +2,12 @@ import re
 import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import NewType, Optional, List
-
-import pandas as pd
-from numpy import ndarray
+from typing import NewType, Optional
 from tqdm import tqdm
 
 userId = NewType('userId', int)
 movieId = NewType('movieId', int)
-import numpy as np
+
 
 
 @dataclass
