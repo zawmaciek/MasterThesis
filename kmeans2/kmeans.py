@@ -1,4 +1,6 @@
 from collections import Counter, defaultdict
+from typing import Tuple, List, Any
+
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
@@ -31,9 +33,9 @@ class KMeansSystem():
         return matrix
 
     def create_model(self, c_num: int) -> None:
-        matrix = self.dataset.get_matrix()
+        self.matrix = self.dataset.get_matrix()
         # SAMPLE RANDOM
-        self.matrix = self.sample_from_np(matrix, 0.1)
+        # self.matrix = self.sample_from_np(matrix, 0.1)
         self.scaler = StandardScaler()
         print("scaling")
         scaled_features = self.scaler.fit_transform(self.matrix)
@@ -44,7 +46,7 @@ class KMeansSystem():
         self.kmeans = KMeans(n_clusters=c_num, random_state=0, n_init="auto")
         self.labels = self.kmeans.fit(scaled_features)
 
-    def infer(self, ratings: list[tuple[movieId, float]]) -> list[str]:
+    def infer(self, ratings: list[tuple[movieId, float]]) -> tuple[list[Any], Any]:
         user_vector = self.dataset.get_matrix_for_user(ratings)
         array = self.scaler.transform([user_vector])[0]
         array = self.pca.transform([array])[0]
@@ -53,7 +55,7 @@ class KMeansSystem():
         users = self.get_user_from_label(label)
         print(f"count: {len(users)}")
         movies = self.movies_from_users(users)
-        return movies
+        return movies, label
 
     def get_user_from_label(self, label: int) -> list[userId]:
         indices = np.where(self.labels.labels_ == label)[0]
@@ -67,31 +69,26 @@ class KMeansSystem():
         for user in users:
             for m_id, rating in ratings[user]:
                 ddict[m_id] += rating
-        top = sorted(ddict.items(), key=lambda item: item[1], reverse=True)[:10]
+        top = sorted(ddict.items(), key=lambda item: item[1], reverse=True)[0:10]
         return [movies_map[a[0]].title for a in top]
 
     def get_vector_for_users(self, users: list[userId]):
         users_vector = [0 for _ in range(len(self.dataset.GENRES))]
         movies_map = {a.movieId: a for a in self.dataset.all_movies}
-        count = 0
         for user in tqdm(users, desc="get matrix for users"):
             for m_id, rating in self.dataset.ratings_by_user[user]:
                 if m_id in movies_map:
                     movie_vector = movies_map[m_id].genres_vector
                     users_vector = [users_vector[i] + movie_vector[i] * rating for i in range(len(self.dataset.GENRES))]
-                    count += 1
-        user_vector = [i / count for i in users_vector]
-        return user_vector
+        s = sum(users_vector)
+        users_vector = [i / s for i in users_vector]
+        return {self.dataset.GENRES[i]: users_vector[i] for i in range(len(users_vector))}
+
+    def add_group_for_users(self):
+        for label in tqdm(range(50), desc="putting in"):
+            users = self.get_user_from_label(label)
+            for user in users:
+                self.dataset.add_group_to_user(user, label)
 
 
 k = KMeansSystem(50)
-for fan in stereotypical_fans:
-    print(fan)
-    movies = [(movieId(a[0]), a[1]) for a in stereotypical_fans[fan]]
-    print(k.infer(movies))
-# for label in range(50):
-#     users = k.get_user_from_label(label)
-#     print(f"count: {len(users)}")
-#     print(k.get_vector_for_users(users))
-#     movies = k.movies_from_users(users)
-#     print(movies)

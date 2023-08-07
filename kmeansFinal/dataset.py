@@ -17,16 +17,11 @@ import numpy as np
 class Movie:
     movieId: movieId
     title: str
-    genres: list[str]
-
-
-@dataclass
-class Movie:
-    movieId: movieId
-    title: str
     year: Optional[int]
     genres: list[str]
     genres_vector: list[float]
+    rating: float
+    rating_count: int
 
 
 class Dataset:
@@ -56,24 +51,16 @@ class Dataset:
             "Musical",
             "Western",
             "Film-Noir"]
-        self.set_mappings()
+        self.movie_meta = self.get_movie_meta()
         self.all_movies = self.get_all_movies()
         self.ratings_by_user = self.get_all_ratings_grouped_by_user()
-
-    def set_mappings(self):
-        all_user_ids = self.get_all_user_ids()
-        self.users_count = len(all_user_ids)
-        self.matrix_user_id_to_user_id = dict()
-        self.user_id_to_matrix_user_id = dict()
-        for i, val in tqdm(enumerate(all_user_ids), desc='user mappings'):
-            self.matrix_user_id_to_user_id[i] = val
-            self.user_id_to_matrix_user_id[val] = i
+        self.label_by_user = self.get_user_label_map()
 
     def get_all_movies(self) -> list[Movie]:
         res = self.cur.execute("SELECT * FROM movies").fetchall()
         movies = []
         for m in tqdm(res, desc='get movies'):
-            id = int(m[0])
+            id = movieId(int(m[0]))
             raw_title = m[1]
             genres = m[2].split('|')
             if genres == ["(no genres listed)"]:
@@ -89,7 +76,11 @@ class Dataset:
                         genres_vector.append(0)
                 s = sum(genres_vector)
                 genres_vector = [a / s for a in genres_vector]
-                movies.append(Movie(movieId(id), raw_title, year, genres, genres_vector))
+                if id in self.movie_meta:
+                    avg_rating, count_rating = self.movie_meta[id]
+                else:
+                    avg_rating, count_rating = None, None
+                movies.append(Movie(id, raw_title, year, genres, genres_vector, avg_rating, count_rating))
         return movies
 
     def get_all_movie_ids(self) -> list[movieId]:
@@ -114,34 +105,10 @@ class Dataset:
     def disconnect(self) -> None:
         self.con.close()
 
-    def get_matrix(self):
-        height = self.users_count
-        matrix = np.zeros((height, len(self.GENRES)))
-        movies_map = {a.movieId: a for a in self.all_movies}
-        ratings_by_user = self.ratings_by_user
-        for user in tqdm(ratings_by_user, desc="get matrix"):
-            user_vector = [0 for _ in range(len(self.GENRES))]
-            for m_id, rating in ratings_by_user[user]:
-                if m_id in movies_map:
-                    movie_vector = movies_map[m_id].genres_vector
-                    user_vector = [user_vector[i] + movie_vector[i] * rating for i in range(len(self.GENRES))]
-            s = sum(user_vector)
-            user_vector = [i / s for i in user_vector]
-            for i in range(len(self.GENRES)):
-                matrix[self.user_id_to_matrix_user_id[user], i] = user_vector[i]
-        return matrix
+    def get_movie_meta(self) -> dict[movieId, tuple[float, int]]:
+        res = self.cur.execute("SELECT movieId,AVG(rating),COUNT(rating) FROM ratings GROUP BY movieId")
+        return {movieId(int(a[0])): (float(a[1]) / 5.0, int(a[2])) for a in res}
 
-    def get_matrix_for_user(self, ratings: list[tuple[movieId, float]]) -> list[float]:
-        movies_map = {a.movieId: a for a in self.all_movies}
-        user_vector = [0 for _ in range(len(self.GENRES))]
-        for m_id, rating in ratings:
-            if m_id in movies_map:
-                movie_vector = movies_map[m_id].genres_vector
-                user_vector = [user_vector[i] + movie_vector[i] * rating for i in range(len(self.GENRES))]
-        s = sum(user_vector)
-        user_vector = [i / s for i in user_vector]
-        return user_vector
-
-    def add_group_to_user(self, user: int, group: int):
-        self.cur.execute(f"INSERT INTO groups VALUES ({user},{group})")
-        self.con.commit()
+    def get_user_label_map(self) -> dict[userId, int]:
+        res = self.cur.execute("SELECT * FROM groups")
+        return {userId(int(a[0])): int(a[1]) for a in res}
