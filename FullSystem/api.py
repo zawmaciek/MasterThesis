@@ -72,17 +72,18 @@ class S3CF:
     def __init__(self, dataset: Dataset):
         self.dataset = dataset
         self.user_to_label_map = self.dataset.label_by_user
+        self.all_movie_vectors = self.dataset.get_movies_vectors()
 
     @staticmethod
     def get_distance(m1: list[float], m2: list[float]) -> float:
         return dist(m1, m2)
 
-    def get_reccomendations_for_movie(self, m_id: movieId) -> list[movieId]:
-        all_movie_vectors = self.dataset.get_movies_vectors()
+    def get_reccomendations_for_movie(self, m_id: movieId) -> list[str]:
         vector_from_rankings = self.dataset.movie_vector_mapping[m_id]
-        ranked_users = [TaggedMovie(u.movieId, u.tags, self.get_distance(vector_from_rankings, u.tags)) for u in all_movie_vectors]
+        ranked_users = [TaggedMovie(u.movieId, u.tags, self.dataset.movie_id_title_mapping[u.movieId], self.get_distance(vector_from_rankings, u.tags)) for u in
+                        self.all_movie_vectors]
         sorted_list = sorted(ranked_users, key=lambda x: x.rank, reverse=True)
-        top = [a.movieId for a in sorted_list][:10]
+        top = [a.title for a in sorted_list][:10]
         return top
 
 
@@ -98,9 +99,17 @@ class System:
         rec1, label = self.kmeans.get_reccomendations_for_user(ratings)
         rec2 = self.cf_user.get_reccomendations_for_user(label, ratings)
         rec3 = self.cf_movies.get_reccomendations_for_movie(ratings[0][0])
-        return random.sample(rec1, 5) + random.sample(rec2, 5) + random.sample(rec3, 5)
+        print(f"GENERAL: {random.sample(rec1, 3)}\nSIMILAR USERS: {random.sample(rec2, 3)}\nSPECIFIC: {random.sample(rec3, 3)}\n")
+        return None
 
 
 s = System()
-user = [(movieId(1219), 1.0), (movieId(1085), 1.0), (movieId(491), 1.0), (movieId(1269), 1.0)]
-print(s.get_recommendations_for_user(user))
+stereotypical_fans = dict()
+stereotypical_fans["comedy"] = [(1219, 1.0), (1085, 1.0), (491, 1.0),
+                                (1269, 1.0)]  # blues brothers, dial m for murder,manhattan murder mystery, back to the future
+stereotypical_fans["children"] = [(33, 1.0), (593, 1.0), (594, 1.0), (1012, 1.0)]  # babe, snow white,beauty and the beast,parent trap
+stereotypical_fans["adventure"] = [(647, 1.0), (779, 1.0), (1100, 1.0), (1269, 1.0)]  # mission impossible, idenpenence day, top gun,back to the future
+for user in stereotypical_fans:
+    print(user)
+    user_movies = [(movieId(a[0]), a[1]) for a in stereotypical_fans[user]]
+    s.get_recommendations_for_user(user_movies)

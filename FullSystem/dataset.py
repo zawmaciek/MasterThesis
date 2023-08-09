@@ -22,6 +22,7 @@ class User:
 class TaggedMovie:
     movieId: movieId
     tags: list[float]
+    title: str
     rank: float = 0.0
 
 
@@ -88,6 +89,7 @@ class Dataset:
             self.matrix_tag_id_to_tag_id[i] = val
             self.tag_id_to_matrix_tag_id[val] = i
         self.movie_vector_mapping = self.get_movies_vectors_mapping()
+        self.movie_id_title_mapping = self.get_movie_id_title_mapping()
 
     def get_all_movies(self) -> list[Movie]:
         res = self.cur.execute("SELECT * FROM movies").fetchall()
@@ -142,7 +144,7 @@ class Dataset:
         matrix = np.zeros((height, len(self.GENRES)))
         movies_map = {a.movieId: a for a in self.all_movies}
         ratings_by_user = self.ratings_by_user
-        for user in tqdm(ratings_by_user, desc="get matrix"):
+        for user in tqdm(ratings_by_user, desc="get reduced matrix"):
             user_vector = [0 for _ in range(len(self.GENRES))]
             for m_id, rating in ratings_by_user[user]:
                 if m_id in movies_map:
@@ -197,7 +199,7 @@ class Dataset:
     def get_movies_vectors(self) -> list[TaggedMovie]:
         all = []
         for m_id in self.movie_vector_mapping:
-            all.append(TaggedMovie(m_id, self.movie_vector_mapping[m_id]))
+            all.append(TaggedMovie(m_id, self.movie_vector_mapping[m_id], self.movie_id_title_mapping[m_id]))
         return all
 
     def get_movies_vectors_mapping(self) -> defaultdict[movieId, list[float]]:
@@ -205,8 +207,12 @@ class Dataset:
         res = self.cur.execute('SELECT * FROM "genome-scores"').fetchall()
         for row in tqdm(res, desc="get tags"):
             m_id = movieId(int(row[0]))
-            t_id = tagId(int(row[1]))
-            t_matrix_id = self.tag_id_to_matrix_tag_id[t_id]
-            score = float(row[2])
-            d[m_id][t_matrix_id] = score
+            if m_id in self.all_movie_ids:
+                t_id = tagId(int(row[1]))
+                t_matrix_id = self.tag_id_to_matrix_tag_id[t_id]
+                score = float(row[2])
+                d[m_id][t_matrix_id] = score
         return d
+
+    def get_movie_id_title_mapping(self) -> dict[movieId, str]:
+        return {movie.movieId: movie.title for movie in self.all_movies}
