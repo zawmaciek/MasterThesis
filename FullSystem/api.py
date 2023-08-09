@@ -1,10 +1,10 @@
+import random
+import numpy as np
 from typing import Any
 from math import dist
-import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-
-from dataset import Dataset, movieId, userId, User
+from dataset import Dataset, movieId, userId, User, TaggedMovie
 from sklearn.decomposition import PCA
 
 
@@ -38,7 +38,7 @@ class S1Kmeans:
         array = self.pca.transform([array])[0]
         label = self.kmeans.predict([array])[0]
         users = self.get_users_from_label(label)
-        movies = self.dataset.movies_from_users(users)
+        movies = self.dataset.get_movie_ids_from_users(users)
         return movies, label
 
     def get_user_label_map(self) -> dict[userId, int]:
@@ -60,12 +60,30 @@ class S2CF:
         return dist(u1, u2)
 
     def get_reccomendations_for_user(self, label: int, ratings: list[tuple[movieId, float]]) -> list[movieId]:
-        users = self.dataset.get_user_full_vectors(label)
-        vector_from_rankings = self.dataset.get_full_vector_from_ratings(ratings)
+        users = self.dataset.get_users_full_vectors(label)
+        vector_from_rankings = self.dataset.get_full_user_vector_from_ratings(ratings)
         ranked_users = [User(u.id, u.vector, self.get_distance(vector_from_rankings, u.vector)) for u in users]
         sorted_list = sorted(ranked_users, key=lambda x: x.rank, reverse=True)
         top = [a.id for a in sorted_list][:3]
-        return self.dataset.movies_from_users(top, [a[0] for a in ratings])
+        return self.dataset.get_movie_ids_from_users(top, [a[0] for a in ratings])
+
+
+class S3CF:
+    def __init__(self, dataset: Dataset):
+        self.dataset = dataset
+        self.user_to_label_map = self.dataset.label_by_user
+
+    @staticmethod
+    def get_distance(m1: list[float], m2: list[float]) -> float:
+        return dist(m1, m2)
+
+    def get_reccomendations_for_movie(self, m_id: movieId) -> list[movieId]:
+        all_movie_vectors = self.dataset.get_movies_vectors()
+        vector_from_rankings = self.dataset.movie_vector_mapping[m_id]
+        ranked_users = [TaggedMovie(u.movieId, u.tags, self.get_distance(vector_from_rankings, u.tags)) for u in all_movie_vectors]
+        sorted_list = sorted(ranked_users, key=lambda x: x.rank, reverse=True)
+        top = [a.movieId for a in sorted_list][:10]
+        return top
 
 
 class System:
@@ -74,11 +92,13 @@ class System:
         self.kmeans = S1Kmeans(self.dataset)
         self.dataset.label_by_user = self.kmeans.get_user_label_map()
         self.cf_user = S2CF(self.dataset)
+        self.cf_movies = S3CF(self.dataset)
 
     def get_recommendations_for_user(self, ratings: list[tuple[movieId, float]]) -> list[movieId]:
         rec1, label = self.kmeans.get_reccomendations_for_user(ratings)
         rec2 = self.cf_user.get_reccomendations_for_user(label, ratings)
-        return rec2
+        rec3 = self.cf_movies.get_reccomendations_for_movie(ratings[0][0])
+        return random.sample(rec1, 5) + random.sample(rec2, 5) + random.sample(rec3, 5)
 
 
 s = System()

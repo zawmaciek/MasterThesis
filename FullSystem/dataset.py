@@ -2,12 +2,13 @@ import re
 import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import NewType, Optional
+from typing import NewType, Optional, Any, List
 import numpy as np
 from tqdm import tqdm
 
 userId = NewType('userId', int)
 movieId = NewType('movieId', int)
+tagId = NewType('tagId', int)
 
 
 @dataclass
@@ -18,10 +19,10 @@ class User:
 
 
 @dataclass
-class Movie:
+class TaggedMovie:
     movieId: movieId
-    title: str
-    genres: list[str]
+    tags: list[float]
+    rank: float = 0.0
 
 
 @dataclass
@@ -38,9 +39,6 @@ class Dataset:
         print("LOADING DATASET")
         self.con = sqlite3.connect("../dataset.db")
         self.cur = self.con.cursor()
-        self.user_id_to_matrix_user_id: Optional[dict[userId, int]] = None
-        self.matrix_user_id_to_user_id: Optional[dict[int, userId]] = None
-        self.users_count = None
         self.GENRES = [
             "Adventure",
             "Animation",
@@ -70,18 +68,26 @@ class Dataset:
     def set_mappings(self):
         all_movie_ids = self.get_all_movie_ids()
         all_user_ids = self.get_all_user_ids()
+        all_tag_ids = self.get_all_tag_ids()
         self.movies_count = len(all_movie_ids)
         self.users_count = len(all_user_ids)
+        self.tags_count = len(all_tag_ids)
         self.matrix_user_id_to_user_id = dict()
         self.user_id_to_matrix_user_id = dict()
         self.matrix_movie_id_to_movie_id = dict()
         self.movie_id_to_matrix_movie_id = dict()
+        self.matrix_tag_id_to_tag_id = dict()
+        self.tag_id_to_matrix_tag_id = dict()
         for i, val in tqdm(enumerate(all_movie_ids), desc='movie mappings'):
             self.matrix_movie_id_to_movie_id[i] = val
             self.movie_id_to_matrix_movie_id[val] = i
         for i, val in tqdm(enumerate(all_user_ids), desc='user mappings'):
             self.matrix_user_id_to_user_id[i] = val
             self.user_id_to_matrix_user_id[val] = i
+        for i, val in tqdm(enumerate(all_tag_ids), desc='tag mappings'):
+            self.matrix_tag_id_to_tag_id[i] = val
+            self.tag_id_to_matrix_tag_id[val] = i
+        self.movie_vector_mapping = self.get_movies_vectors_mapping()
 
     def get_all_movies(self) -> list[Movie]:
         res = self.cur.execute("SELECT * FROM movies").fetchall()
@@ -112,6 +118,10 @@ class Dataset:
     def get_all_user_ids(self) -> list[userId]:
         res = self.cur.execute("SELECT DISTINCT userId FROM ratings").fetchall()
         return [userId(int(a[0])) for a in res]
+
+    def get_all_tag_ids(self) -> list[tagId]:
+        res = self.cur.execute('SELECT DISTINCT tagId FROM "genome-tags"').fetchall()
+        return [tagId(int(a[0])) for a in res]
 
     def get_all_ratings(self) -> list[tuple[userId, movieId, float]]:
         res = self.cur.execute("SELECT * FROM ratings").fetchall()
@@ -155,7 +165,7 @@ class Dataset:
         user_vector = [i / s for i in user_vector]
         return user_vector
 
-    def movies_from_users(self, users: list[userId], ignore=None):
+    def get_movie_ids_from_users(self, users: list[userId], ignore=None):
         if ignore is None:
             ignore = []
         ratings = self.ratings_by_user
@@ -167,7 +177,7 @@ class Dataset:
         top = sorted(ddict.items(), key=lambda item: item[1], reverse=True)
         return [movies_map[a[0]].title for a in top if movies_map[a[0]].movieId not in ignore][0:10]
 
-    def get_user_full_vectors(self, label: int) -> list[User]:
+    def get_users_full_vectors(self, label: int) -> list[User]:
         users = []
         length = self.movies_count
         for user in tqdm(self.get_all_user_ids(), desc="get user vectors"):
@@ -178,8 +188,25 @@ class Dataset:
                 users.append(User(user, vector, 0.0))
         return users
 
-    def get_full_vector_from_ratings(self, ratings: list[tuple[movieId, float]]) -> list[float]:
+    def get_full_user_vector_from_ratings(self, ratings: list[tuple[movieId, float]]) -> list[float]:
         vector = [0 for _ in range(self.movies_count)]
         for m_id, rating in ratings:
             vector[self.movie_id_to_matrix_movie_id[m_id]] = rating
         return vector
+
+    def get_movies_vectors(self) -> list[TaggedMovie]:
+        all = []
+        for m_id in self.movie_vector_mapping:
+            all.append(TaggedMovie(m_id, self.movie_vector_mapping[m_id]))
+        return all
+
+    def get_movies_vectors_mapping(self) -> defaultdict[movieId, list[float]]:
+        d = defaultdict(lambda: [0 for _ in range(self.tags_count)])
+        res = self.cur.execute('SELECT * FROM "genome-scores"').fetchall()
+        for row in tqdm(res, desc="get tags"):
+            m_id = movieId(int(row[0]))
+            t_id = tagId(int(row[1]))
+            t_matrix_id = self.tag_id_to_matrix_tag_id[t_id]
+            score = float(row[2])
+            d[m_id][t_matrix_id] = score
+        return d
