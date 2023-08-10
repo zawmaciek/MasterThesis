@@ -2,7 +2,7 @@ import re
 import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import NewType, Optional, Any, List
+from typing import NewType, Optional
 import numpy as np
 from tqdm import tqdm
 
@@ -37,6 +37,18 @@ class Movie:
 
 class Dataset:
     def __init__(self) -> None:
+        self.movie_id_title_mapping = None
+        self.movie_vector_mapping = None
+        self.tag_id_to_matrix_tag_id = None
+        self.matrix_tag_id_to_tag_id = None
+        self.movie_id_to_matrix_movie_id = None
+        self.matrix_movie_id_to_movie_id = None
+        self.user_id_to_matrix_user_id = None
+        self.matrix_user_id_to_user_id = None
+        self.tags_count = None
+        self.users_count = None
+        self.movies_count = None
+        self.label_by_user = None
         print("LOADING DATASET")
         self.con = sqlite3.connect("../dataset.db")
         self.cur = self.con.cursor()
@@ -167,7 +179,7 @@ class Dataset:
         user_vector = [i / s for i in user_vector]
         return user_vector
 
-    def get_movie_ids_from_users(self, users: list[userId], ignore=None):
+    def get_movie_ids_from_users(self, users: list[userId], ignore: list[movieId] = None) -> list[movieId]:
         if ignore is None:
             ignore = []
         ratings = self.ratings_by_user
@@ -177,7 +189,7 @@ class Dataset:
             for m_id, rating in ratings[user]:
                 ddict[m_id] += rating
         top = sorted(ddict.items(), key=lambda item: item[1], reverse=True)
-        return [movies_map[a[0]].title for a in top if movies_map[a[0]].movieId not in ignore][0:10]
+        return [movies_map[a[0]].movieId for a in top if movies_map[a[0]].movieId not in ignore][0:10]
 
     def get_users_full_vectors(self, label: int) -> list[User]:
         users = []
