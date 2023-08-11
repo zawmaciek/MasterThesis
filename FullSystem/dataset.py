@@ -2,6 +2,7 @@ import re
 import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
+from functools import cache
 from typing import NewType, Optional
 import numpy as np
 from tqdm import tqdm
@@ -79,25 +80,25 @@ class Dataset:
         print("DATASET LOADED")
 
     def set_mappings(self):
-        all_movie_ids = self.get_all_movie_ids()
-        all_user_ids = self.get_all_user_ids()
-        all_tag_ids = self.get_all_tag_ids()
-        self.movies_count = len(all_movie_ids)
-        self.users_count = len(all_user_ids)
-        self.tags_count = len(all_tag_ids)
+        self.all_movie_ids = self.get_all_movie_ids()
+        self.all_user_ids = self.get_all_user_ids()
+        self.all_tag_ids = self.get_all_tag_ids()
+        self.movies_count = len(self.all_movie_ids)
+        self.users_count = len(self.all_user_ids)
+        self.tags_count = len(self.all_tag_ids)
         self.matrix_user_id_to_user_id = dict()
         self.user_id_to_matrix_user_id = dict()
         self.matrix_movie_id_to_movie_id = dict()
         self.movie_id_to_matrix_movie_id = dict()
         self.matrix_tag_id_to_tag_id = dict()
         self.tag_id_to_matrix_tag_id = dict()
-        for i, val in tqdm(enumerate(all_movie_ids), desc='movie mappings'):
+        for i, val in tqdm(enumerate(self.all_movie_ids), desc='movie mappings'):
             self.matrix_movie_id_to_movie_id[i] = val
             self.movie_id_to_matrix_movie_id[val] = i
-        for i, val in tqdm(enumerate(all_user_ids), desc='user mappings'):
+        for i, val in tqdm(enumerate(self.all_user_ids), desc='user mappings'):
             self.matrix_user_id_to_user_id[i] = val
             self.user_id_to_matrix_user_id[val] = i
-        for i, val in tqdm(enumerate(all_tag_ids), desc='tag mappings'):
+        for i, val in tqdm(enumerate(self.all_tag_ids), desc='tag mappings'):
             self.matrix_tag_id_to_tag_id[i] = val
             self.tag_id_to_matrix_tag_id[val] = i
         self.movie_vector_mapping = self.get_movies_vectors_mapping()
@@ -191,10 +192,11 @@ class Dataset:
         top = sorted(ddict.items(), key=lambda item: item[1], reverse=True)
         return [movies_map[a[0]].movieId for a in top if movies_map[a[0]].movieId not in ignore][0:10]
 
+    @cache
     def get_users_full_vectors(self, label: int) -> list[User]:
         users = []
         length = self.movies_count
-        for user in tqdm(self.get_all_user_ids(), desc="get user vectors"):
+        for user in tqdm(self.all_user_ids, desc="get user vectors"):
             if self.label_by_user[user] == label:
                 vector = [0 for _ in range(length)]
                 for m_id, rating in self.ratings_by_user[user]:
