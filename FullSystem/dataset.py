@@ -226,6 +226,11 @@ class Dataset:
                 t_matrix_id = self.tag_id_to_matrix_tag_id[t_id]
                 score = float(row[2])
                 d[m_id][t_matrix_id] = score
+        for m_id in tqdm(d, desc="normalize movie tags"):
+            l = d[m_id]
+            s = sum(l)
+            new_l = [a / s for a in l]
+            d[m_id] = new_l
         return d
 
     def get_movie_id_title_mapping(self) -> dict[movieId, str]:

@@ -1,13 +1,16 @@
-import dash_bootstrap_components as dbc
 import random
+import time
+
 import numpy as np
 from typing import Any
 from math import dist
+
+import pandas as pd
+from pandas import DataFrame
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from dataset import Dataset, movieId, userId, User, TaggedMovie
 from sklearn.decomposition import PCA
-from dash import Dash, html, dcc, callback, Output, Input
 
 
 class S1Kmeans:
@@ -97,54 +100,31 @@ class System:
         self.cf_user = S2CF(self.dataset)
         self.cf_movies = S3CF(self.dataset)
 
-    def get_recommendations_for_user(self, ratings: list[tuple[movieId, float]]) -> str:
+    def get_recommendations_for_user(self, ratings: list[tuple[movieId, float]]) -> tuple[DataFrame, DataFrame]:
+        t = time.time()
         rec1, label = self.kmeans.get_reccomendations_for_user(ratings)
-        rec1 = random.sample(rec1, 3)
+        rec1 = random.sample(rec1, 5)
         rec2 = self.cf_user.get_reccomendations_for_user(label, ratings, rec1)
-        rec2 = random.sample(rec2, 3)
+        rec2 = random.sample(rec2, 5)
         rec3 = self.cf_movies.get_reccomendations_for_movie(ratings[0][0], rec1 + rec2)
-        rec3 = random.sample(rec3, 3)
-        return f"GENERAL: {[self.dataset.movie_id_title_mapping[a] for a in rec1]}<br> " \
-               f"SIMILAR USERS: {[self.dataset.movie_id_title_mapping[a] for a in rec2]}\n<br> " \
-               f"SPECIFIC: {[self.dataset.movie_id_title_mapping[a] for a in rec3]}\n"
+        rec3 = random.sample(rec3, 5)
+        ensemble = rec1[:2] + rec2[:2] + rec3[:2]
+        print(f"LOADING TOOK {time.time() - t} seconds")
+        return pd.DataFrame({"GENERAL": [self.dataset.movie_id_title_mapping[a] for a in rec1],
+                             "SIMILAR": [self.dataset.movie_id_title_mapping[a] for a in rec2],
+                             "SPECIFIC": [self.dataset.movie_id_title_mapping[a] for a in rec3]}), \
+            pd.DataFrame({"ENSEMBLE": [self.dataset.movie_id_title_mapping[a] for a in ensemble]})
 
 
-# stereotypical_fans = dict()
-# stereotypical_fans["comedy"] = [(1219, 1.0), (1085, 1.0), (491, 1.0),
-#                                 (1269, 1.0)]  # blues brothers, dial m for murder,manhattan murder mystery, back to the future
-# stereotypical_fans["children"] = [(33, 1.0), (593, 1.0), (594, 1.0), (1012, 1.0)]  # babe, snow white,beauty and the beast,parent trap
-# stereotypical_fans["adventure"] = [(647, 1.0), (779, 1.0), (1100, 1.0), (1269, 1.0)]  # mission impossible, idenpenence day, top gun,back to the future
-# for user in stereotypical_fans:
-#     print(user)
-#     user_movies = [(movieId(a[0]), a[1]) for a in stereotypical_fans[user]]
-#     s.get_recommendations_for_user(user_movies)
-
-s = System()
-app = Dash(external_stylesheets=[dbc.themes.LUX])
-
-app.layout = html.Div([
-    html.H1(children='Movie Recommender System', style={'textAlign': 'center'}),
-    dcc.Dropdown(
-        options=s.dataset.movie_id_title_mapping,
-        multi=True,
-        id='movie-selection'
-    ),
-    html.H2(id="recommendations", children="select some movies")
-])
-
-
-@callback(
-    Output('recommendations', 'children'),
-    Input('movie-selection', 'value')
-)
-def update_graph(value):
-    if value not in [None, []]:
-        ratings = [(movieId(int(a)), 1.0) for a in value]
-        print(ratings)
-        return s.get_recommendations_for_user(ratings)
-    else:
-        return "select some movies"
-
-
-if __name__ == '__main__':
-    app.run(debug=False)
+if __name__ == "__main__":
+    s = System()
+    stereotypical_fans = dict()
+    stereotypical_fans["comedy"] = [(1219, 1.0), (1085, 1.0), (491, 1.0),
+                                    (1269, 1.0)]  # blues brothers, dial m for murder,manhattan murder mystery, back to the future
+    stereotypical_fans["children"] = [(33, 1.0), (593, 1.0), (594, 1.0), (1012, 1.0)]  # babe, snow white,beauty and the beast,parent trap
+    stereotypical_fans["adventure"] = [(647, 1.0), (779, 1.0), (1100, 1.0), (1269, 1.0)]  # mission impossible, idenpenence day, top gun,back to the future
+    for user in stereotypical_fans:
+        print(user)
+        user_movies = [(movieId(a[0]), a[1]) for a in stereotypical_fans[user]]
+        s.get_recommendations_for_user(user_movies)
+        print(s)
