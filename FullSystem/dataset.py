@@ -128,9 +128,11 @@ class Dataset:
         return movies
 
     def get_all_movie_ids(self) -> set[movieId]:
+        print('get all movie ids')
         return {a.movieId for a in self.all_movies}
 
     def get_all_user_ids(self) -> list[userId]:
+        print('get all user ids')
         res = self.cur.execute("SELECT DISTINCT userId FROM ratings").fetchall()
         return [userId(int(a[0])) for a in res]
 
@@ -180,7 +182,7 @@ class Dataset:
         user_vector = [i / s for i in user_vector]
         return user_vector
 
-    def get_movie_ids_from_users(self, users: list[userId], ignore: list[movieId] = None) -> list[movieId]:
+    def get_movie_ids_from_users(self, users: list[userId], ignore: list[movieId] = None,how_many=10) -> list[movieId]:
         if ignore is None:
             ignore = []
         ratings = self.ratings_by_user
@@ -190,7 +192,7 @@ class Dataset:
             for m_id, rating in ratings[user]:
                 ddict[m_id] += rating
         top = sorted(ddict.items(), key=lambda item: item[1], reverse=True)
-        return [movies_map[a[0]].movieId for a in top if movies_map[a[0]].movieId not in ignore][0:10]
+        return [movies_map[a[0]].movieId for a in top if movies_map[a[0]].movieId not in ignore][0:how_many]
 
     @cache
     def get_users_full_vectors(self, label: int) -> list[User]:

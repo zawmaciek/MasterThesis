@@ -37,13 +37,13 @@ class S1Kmeans:
         u_ids = [self.dataset.matrix_user_id_to_user_id[id] for id in indices]
         return u_ids
 
-    def get_reccomendations_for_user(self, ratings: list[tuple[movieId, float]]) -> tuple[list[movieId], Any]:
+    def get_reccomendations_for_user(self, ratings: list[tuple[movieId, float]], how_many=10) -> tuple[list[movieId], Any]:
         user_vector = self.dataset.get_reduced_matrix_for_user(ratings)
         array = self.scaler.transform([user_vector])[0]
         array = self.pca.transform([array])[0]
         label = self.kmeans.predict([array])[0]
         users = self.get_users_from_label(label)
-        movies = self.dataset.get_movie_ids_from_users(users, [a[0] for a in ratings])
+        movies = self.dataset.get_movie_ids_from_users(users, [a[0] for a in ratings], how_many)
         return movies, label
 
     def get_user_label_map(self) -> dict[userId, int]:
@@ -94,16 +94,19 @@ class S3CF:
 
 class System:
     def __init__(self):
+        t = time.time()
+        print("STARTING STARTUP")
         self.dataset = Dataset()
         self.kmeans = S1Kmeans(self.dataset)
         self.dataset.label_by_user = self.kmeans.get_user_label_map()
         self.cf_user = S2CF(self.dataset)
         self.cf_movies = S3CF(self.dataset)
+        print(f"STARTUP TOOK {time.time() - t}")
 
     def get_recommendations_for_user(self, ratings: list[tuple[movieId, float]]) -> tuple[DataFrame, DataFrame]:
         t = time.time()
         rec1, label = self.kmeans.get_reccomendations_for_user(ratings)
-        rec1 = random.sample(rec1, 5)
+        rec1 = rec1[:5]
         rec2 = self.cf_user.get_reccomendations_for_user(label, ratings, rec1)
         rec2 = random.sample(rec2, 5)
         rec3 = self.cf_movies.get_reccomendations_for_movie(ratings[0][0], rec1 + rec2)
