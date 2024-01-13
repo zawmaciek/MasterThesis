@@ -160,7 +160,7 @@ class Dataset:
         movies_map = {a.movieId: a for a in self.all_movies}
         ratings_by_user = self.ratings_by_user
         for user in tqdm(ratings_by_user, desc="get reduced matrix"):
-            user_vector = [0 for _ in range(len(self.GENRES))]
+            user_vector = [0 for _ in self.GENRES]
             for m_id, rating in ratings_by_user[user]:
                 if m_id in movies_map:
                     movie_vector = movies_map[m_id].genres_vector
@@ -173,7 +173,7 @@ class Dataset:
 
     def get_reduced_matrix_for_user(self, ratings: list[tuple[movieId, float]]) -> list[float]:
         movies_map = {a.movieId: a for a in self.all_movies}
-        user_vector = [0 for _ in range(len(self.GENRES))]
+        user_vector = [0 for _ in self.GENRES]
         for m_id, rating in ratings:
             if m_id in movies_map:
                 movie_vector = movies_map[m_id].genres_vector
@@ -192,19 +192,20 @@ class Dataset:
             for m_id, rating in ratings[user]:
                 ddict[m_id] += rating
         top = sorted(ddict.items(), key=lambda item: item[1], reverse=True)
-        return [movies_map[a[0]].movieId for a in top if movies_map[a[0]].movieId not in ignore][0:how_many]
+        return [movies_map[a[0]].movieId for a in top if movies_map[a[0]].movieId not in ignore][:how_many]
 
     @cache
     def get_users_full_vectors(self, label: int) -> list[User]:
         users = []
         length = self.movies_count
-        for user in tqdm(self.all_user_ids, desc="get user vectors"):
+        for user in self.all_user_ids:
             if self.label_by_user[user] == label:
                 vector = [0 for _ in range(length)]
                 for m_id, rating in self.ratings_by_user[user]:
                     vector[self.movie_id_to_matrix_movie_id[m_id]] = rating
                 users.append(User(user, vector, 0.0))
         return users
+
 
     def get_full_user_vector_from_ratings(self, ratings: list[tuple[movieId, float]]) -> list[float]:
         vector = [0 for _ in range(self.movies_count)]

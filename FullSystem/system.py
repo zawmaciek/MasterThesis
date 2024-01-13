@@ -64,12 +64,12 @@ class S2CF:
     def get_distance(u1: list[float], u2: list[float]) -> float:
         return dist(u1, u2)
 
-    def get_reccomendations_for_user(self, label: int, ratings: list[tuple[movieId, float]], ignored: list[movieId]) -> list[movieId]:
+    def get_reccomendations_for_user(self, label: int, ratings: list[tuple[movieId, float]], ignored: list[movieId], how_many=10) -> list[movieId]:
         users = self.dataset.get_users_full_vectors(label)
         vector_from_rankings = self.dataset.get_full_user_vector_from_ratings(ratings)
         ranked_users = [User(u.id, u.vector, self.get_distance(vector_from_rankings, u.vector)) for u in users]
         sorted_list = sorted(ranked_users, key=lambda x: x.rank, reverse=True)
-        top = [a.id for a in sorted_list if a.id not in ignored][:3]
+        top = [a.id for a in sorted_list if a.id not in ignored][:how_many]
         return self.dataset.get_movie_ids_from_users(top, [a[0] for a in ratings])
 
 
@@ -83,12 +83,12 @@ class S3CF:
     def get_distance(m1: list[float], m2: list[float]) -> float:
         return dist(m1, m2)
 
-    def get_reccomendations_for_movie(self, m_id: movieId, ignored: list[movieId]) -> list[movieId]:
+    def get_reccomendations_for_movie(self, m_id: movieId, ignored: list[movieId], how_many=10) -> list[movieId]:
         vector_from_rankings = self.dataset.movie_vector_mapping[m_id]
         ranked_users = [TaggedMovie(u.movieId, u.tags, self.dataset.movie_id_title_mapping[u.movieId], self.get_distance(vector_from_rankings, u.tags)) for u in
                         self.all_movie_vectors]
         sorted_list = sorted(ranked_users, key=lambda x: x.rank, reverse=True)
-        top = [a.movieId for a in sorted_list if a.movieId not in ignored][:10]
+        top = [a.movieId for a in sorted_list if a.movieId not in ignored][:how_many]
         return top
 
 
@@ -103,16 +103,20 @@ class System:
         self.cf_movies = S3CF(self.dataset)
         print(f"STARTUP TOOK {time.time() - t}")
 
-    def get_recommendations_for_user(self, ratings: list[tuple[movieId, float]]) -> tuple[DataFrame, DataFrame]:
+    def get_raw_recommendations_for_user(self, ratings: list[tuple[movieId, float]], how_many=10) -> tuple[list[movieId], Any, Any]:
         t = time.time()
-        rec1, label = self.kmeans.get_reccomendations_for_user(ratings)
+        rec1, label = self.kmeans.get_reccomendations_for_user(ratings, how_many)
         rec1 = rec1[:5]
-        rec2 = self.cf_user.get_reccomendations_for_user(label, ratings, rec1)
+        rec2 = self.cf_user.get_reccomendations_for_user(label, ratings, rec1, how_many)
         rec2 = random.sample(rec2, 5)
-        rec3 = self.cf_movies.get_reccomendations_for_movie(ratings[0][0], rec1 + rec2)
+        rec3 = self.cf_movies.get_reccomendations_for_movie(ratings[0][0], rec1 + rec2, how_many)
         rec3 = random.sample(rec3, 5)
-        ensemble = rec1[:2] + rec2[:2] + rec3[:2]
         print(f"LOADING TOOK {time.time() - t} seconds")
+        return rec1, rec2, rec3
+
+    def get_recommendations_for_user(self, ratings: list[tuple[movieId, float]]) -> tuple[DataFrame, DataFrame]:
+        rec1, rec2, rec3 = self.get_raw_recommendations_for_user(ratings)
+        ensemble = rec1[:2] + rec2[:2] + rec3[:2]
         return pd.DataFrame({"GENERAL": [self.dataset.movie_id_title_mapping[a] for a in rec1],
                              "SIMILAR": [self.dataset.movie_id_title_mapping[a] for a in rec2],
                              "SPECIFIC": [self.dataset.movie_id_title_mapping[a] for a in rec3]}), \

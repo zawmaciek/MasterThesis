@@ -106,7 +106,7 @@ class Dataset:
     def get_user_vectors(self, label: int) -> list[User]:
         users = []
         length = self.movies_count
-        for user in tqdm(self.get_all_user_ids(), desc="get user vectors"):
+        for user in self.get_all_user_ids():
             if self.label_by_user[user] == label:
                 vector = [0 for _ in range(length)]
                 for m_id, rating in self.ratings_by_user[user]:
